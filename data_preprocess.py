@@ -4,13 +4,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from configuration import get_config
 from utils import keyword_spot
+import pandas as pd
+from progressbar import progressbar
 
 config = get_config()   # get arguments from parser
 
 # downloaded dataset path
-audio_path= r'C:\Users\LG\Documents\DataSets\Vctk\data'                                          # utterance dataset
-clean_path = r'C:\Users\LG\Documents\Deep_learning\speaker_vertification\clean_testset_wav'  # clean dataset
-noisy_path = r'C:\Users\LG\Documents\Deep_learning\speaker_vertification\noisy_testset_wav'  # noisy dataset
+audio_path= r'/mnt/c/Users/gabri/Documents/Projetos/start/speaker_verification/cv-corpus-5.1-2020-06-22/pt/validated'  # utterance dataset
+clean_path = r'data/clean_testset_wav'  # clean dataset
+noisy_path = r'data/noisy_testset_wav'  # noisy dataset
 
 
 def extract_noise():
@@ -97,43 +99,45 @@ def save_spectrogram_tisv():
     os.makedirs(config.train_path, exist_ok=True)   # make folder to save train file
     os.makedirs(config.test_path, exist_ok=True)    # make folder to save test file
 
+    audio_df = pd.read_csv('/mnt/c/Users/gabri/Documents/Projetos/start/speaker_verification/cv-corpus-5.1-2020-06-22/pt/validated.tsv', sep='\t')[:10000]
+    
     utter_min_len = (config.tisv_frame * config.hop + config.window) * config.sr    # lower bound of utterance length
-    total_speaker_num = len(os.listdir(audio_path))
-    train_speaker_num= (total_speaker_num//10)*9            # split total data 90% train and 10% test
+    total_speaker_num = audio_df['client_id'].unique().shape[0]
+    train_speaker_num = (total_speaker_num//10)*9            # split total data 90% train and 10% test
     print("total speaker number : %d"%total_speaker_num)
     print("train : %d, test : %d"%(train_speaker_num, total_speaker_num-train_speaker_num))
-    for i, folder in enumerate(os.listdir(audio_path)):
-        speaker_path = os.path.join(audio_path, folder)     # path of each speaker
-        print("%dth speaker processing..."%i)
+
+    #for i, folder in enumerate(os.listdir(audio_path)):
+    for i, group in enumerate(progressbar(audio_df.groupby('client_id'))):
+        client_id, speaker_df = group
         utterances_spec = []
         k=0
-        for utter_name in os.listdir(speaker_path):
-            utter_path = os.path.join(speaker_path, utter_name)         # path of each utterance
+        for index, row in speaker_df.iterrows():
+            utter_path = os.path.join(audio_path, row['path'])         # path of each utterance
             utter, sr = librosa.core.load(utter_path, config.sr)        # load utterance audio
             intervals = librosa.effects.split(utter, top_db=20)         # voice activity detection
             for interval in intervals:
                 if (interval[1]-interval[0]) > utter_min_len:           # If partial utterance is sufficient long,
                     utter_part = utter[interval[0]:interval[1]]         # save first and last 180 frames of spectrogram.
                     S = librosa.core.stft(y=utter_part, n_fft=config.nfft,
-                                          win_length=int(config.window * sr), hop_length=int(config.hop * sr))
+                                        win_length=int(config.window * sr), hop_length=int(config.hop * sr))
                     S = np.abs(S) ** 2
                     mel_basis = librosa.filters.mel(sr=config.sr, n_fft=config.nfft, n_mels=40)
                     S = np.log10(np.dot(mel_basis, S) + 1e-6)           # log mel spectrogram of utterances
-
                     utterances_spec.append(S[:, :config.tisv_frame])    # first 180 frames of partial utterance
                     utterances_spec.append(S[:, -config.tisv_frame:])   # last 180 frames of partial utterance
-
-        utterances_spec = np.array(utterances_spec)
-        print(utterances_spec.shape)
-        if i<train_speaker_num:      # save spectrogram as numpy file
-            np.save(os.path.join(config.train_path, "speaker%d.npy"%i), utterances_spec)
-        else:
-            np.save(os.path.join(config.test_path, "speaker%d.npy"%(i-train_speaker_num)), utterances_spec)
-
+                
+        if len(utterances_spec) > 0:
+            utterances_spec = np.array(utterances_spec)
+            if i<train_speaker_num:      # save spectrogram as numpy file
+                np.save(os.path.join(config.train_path, "{}.npy".format(client_id)), utterances_spec)
+            else:
+                np.save(os.path.join(config.test_path, "{}.npy".format(client_id)), utterances_spec)
+    
 
 if __name__ == "__main__":
-    extract_noise()
-    if config.tdsv:
-        save_spectrogram_tdsv()
-    else:
-        save_spectrogram_tisv()
+    #extract_noise()
+    #if config.tdsv:
+    #    save_spectrogram_tdsv()
+    #else:
+    save_spectrogram_tisv()

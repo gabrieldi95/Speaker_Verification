@@ -5,6 +5,7 @@ import time
 from utils import random_batch, normalize, similarity, loss_cal, optim
 from configuration import get_config
 from tensorflow.contrib import rnn
+from progressbar import progressbar
 
 config = get_config()
 
@@ -60,7 +61,7 @@ def train(path):
         lr_factor = 1   # lr decay factor ( 1/2 per 10000 iteration)
         loss_acc = 0    # accumulated loss ( for running average of loss)
 
-        for iter in range(config.iteration):
+        for iter in progressbar(range(config.iteration)):
             # run forward and backward propagation and update parameters
             _, loss_cur, summary = sess.run([train_op, loss, merged],
                                   feed_dict={batch: random_batch(), lr: config.lr*lr_factor})

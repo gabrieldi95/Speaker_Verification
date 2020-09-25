@@ -1,0 +1,4 @@
+test_tisv/
+train_tisv/
+__pycache__/
+venv/
